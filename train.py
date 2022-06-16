@@ -8,37 +8,41 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 import torch.nn as nn
 from torch.nn.utils.rnn import pad_sequence
-# from model_convlstm import Model
-# from model_conv3d import Model
+from models import ResNet, ResNetGRU, ResNetLSTM, ResNetConv1D
 
 
 # args
-load_model_path = None
 batch_size = 4
 num_epoch = 5
-
-# from model_resnet import Model
-# from model_gru import Model
-# from model_lstm import Model
-from model_conv1d import Model
-train_frame_path = '/raid/data_yubjs/train/frame'
-train_pose_path = '/raid/data_yubjs/train/pose'
-train_gaze_path = '/raid/data_yubjs/train/gaze'
-train_bbox_path = None # '/raid/data_yubjs/train/bbox'
-val_frame_path = '/raid/data_yubjs/val/frame'
-val_pose_path = '/raid/data_yubjs/val/pose'
-val_gaze_path = '/raid/data_yubjs/val/gaze'
-val_bbox_path = None # '/raid/data_yubjs/val/bbox'
-ocr_graph_path = None # '/home/yubjs/MTOM/OCRMap.txt'
-label_path = '/home/yubjs/MTOM/outfile'
-save_path = 'experiments_backup/pose_gaze_conv1d_T11'
+model_type = 'resnet'
+# model_type = 'gru'
+# model_type = 'lstm'
+# model_type = 'conv1d'
+inp_dim = 512 # rgb
+# inp_dim = 512 + 150 # pose
+# inp_dim = 512 + 6 # gaze
+# inp_dim = 512 + 108 # bbox
+# inp_dim = 512 + 64 # ocr
+# inp_dim = 512 + 108 + 64 # bbox + ocr
+# inp_dim = 512 + 150 + 6 # pose + gaze
+# inp_dim = 512 + 150 + 6 + 108 + 64 # all
+train_frame_path = '/path/to/train/frame'
+train_pose_path = None # '/path/to/train/pose'
+train_gaze_path = None # '/path/to/train/gaze'
+train_bbox_path = None # '/path/to/train/bbox'
+val_frame_path = '/path/to/val/frame'
+val_pose_path = None # '/path/to/val/pose'
+val_gaze_path = None # '/path/to/val/gaze'
+val_bbox_path = None # '/path/to/val/bbox'
+ocr_graph_path = None # '/path/to/OCRMap.txt'
+label_path = '/path/to/label'
+save_path = 'experiments/'
 gpu_id = 7
 
 
 def pad_collate(batch):
     (aa, bb, cc, dd, ee, ff) = zip(*batch)
     seq_lens = [len(a) for a in aa]
-    #   y_lens = [len(y) for y in yy]
 
     aa_pad = pad_sequence(aa, batch_first=True, padding_value=0)
     bb_pad = pad_sequence(bb, batch_first=True, padding_value=0)
@@ -74,14 +78,10 @@ def get_classification_accuracy(pred_left_labels, pred_right_labels, labels, seq
     left_correct = torch.argmax(pred_left_labels, 2) == labels[:,:,0]
     right_correct = torch.argmax(pred_right_labels, 2) == labels[:,:,1]
     num_pred = sum(sequence_lengths) * 2
-    # num_correct = (torch.sum(left_correct[i][:size]) + torch.sum(right_correct[i][:size])).item()
     num_correct = 0
     for i in range(len(sequence_lengths)):
         size = sequence_lengths[i]
         num_correct += (torch.sum(left_correct[i][:size]) + torch.sum(right_correct[i][:size])).item()
-    # print(pred_left_labels.shape, labels.shape)
-    # num_correct = torch.sum(mask == labels).item()
-    # acc = num_correct / size
     acc = num_correct / num_pred
 
     return acc, num_correct, num_pred
@@ -100,14 +100,15 @@ def train():
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8, collate_fn=pad_collate)
     val_dataset = Data(val_frame_path, label_path, val_pose_path, val_gaze_path, val_bbox_path, ocr_graph_path)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=8, collate_fn=pad_collate)
-
     device = torch.device("cuda:{}".format(gpu_id) if torch.cuda.is_available() else 'cpu')
-    if load_model_path is not None:
-        model = Model(device).to(device)
-        model.load_state_dict(torch.load(load_model_path, map_location=device))
-        model.device = device
-    else:
-        model = Model(device).to(device)
+    if model_type == 'resnet':
+        model = ResNet(inp_dim, device).to(device)
+    elif model_type == 'gru':
+        model = ResNetGRU(inp_dim, device).to(device)
+    elif model_type == 'lstm':
+        model = ResNetLSTM(inp_dim, device).to(device)
+    elif model_type == 'conv1d':
+        model = ResNetConv1D(inp_dim, device).to(device)
     optimizer = torch.optim.Adam(model.parameters())
     cross_entropy_loss = nn.CrossEntropyLoss().to(device)
     stats = {'train': {'cls_loss': [], 'cls_acc': []}, 'val': {'cls_loss': [], 'cls_acc': []}}
@@ -128,12 +129,9 @@ def train():
             pred_left_labels = torch.reshape(pred_left_labels, (-1, 27))
             pred_right_labels = torch.reshape(pred_right_labels, (-1, 27))
             labels = torch.reshape(labels, (-1, 2)).to(device)
-            # print(labels.shape, labels[:,0].shape, labels[:,1].shape, pred_left_labels.shape, pred_right_labels.shape)
-            # calculate train performance metrics
             batch_train_acc, batch_num_correct, batch_num_pred = get_classification_accuracy(pred_left_labels, pred_right_labels, labels, sequence_lengths)
             epoch_cnt += batch_num_pred
             epoch_num_correct += batch_num_correct
-            # print(pred_left_labels.shape, labels.shape)
             loss = cross_entropy_loss(pred_left_labels, labels[:,0]) + cross_entropy_loss(pred_right_labels, labels[:,1])
             temp_train_classification_loss.append(loss.data.item() * batch_num_pred / 2)
 
@@ -158,14 +156,11 @@ def train():
         with torch.no_grad():
             for j, batch in tqdm(enumerate(val_dataloader)):
                 frames, labels, poses, gazes, bboxes, ocr_graphs, sequence_lengths = batch
-                # retrieved_batch_size = frames.shape[0]
-                # total_cnt += retrieved_batch_size
                 pred_left_labels, pred_right_labels = model(frames, poses, gazes, bboxes, ocr_graphs)
                 pred_left_labels = torch.reshape(pred_left_labels, (-1, 27))
                 pred_right_labels = torch.reshape(pred_right_labels, (-1, 27))
                 labels = torch.reshape(labels, (-1, 2)).to(device)
                 batch_val_acc, batch_num_correct, batch_num_pred = get_classification_accuracy(pred_left_labels, pred_right_labels, labels, sequence_lengths)
-                # val_acc, num_correct = get_episode_classification_accuracy(pred_labels, labels)
                 epoch_cnt += batch_num_pred
                 epoch_num_correct += batch_num_correct
                 loss = cross_entropy_loss(pred_left_labels, labels[:,0]) + cross_entropy_loss(pred_right_labels, labels[:,1])
