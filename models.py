@@ -4,22 +4,14 @@ import torchvision.models as models
 
 
 class ResNet(nn.Module):
-    def __init__(self, device):
+    def __init__(self, input_dim, device):
         super(ResNet, self).__init__()
         # Conv
         resnet = models.resnet34(pretrained=True)
         self.resnet = nn.Sequential(*(list(resnet.children())[:-1]))
         # FFs
-        inp_dim = 512 # rgb
-        # inp_dim = 512 + 150 # pose
-        # inp_dim = 512 + 6 # gaze
-        # inp_dim = 512 + 108 # bbox
-        # inp_dim = 512 + 64 # ocr
-        # inp_dim = 512 + 108 + 64 # bbox + ocr
-        # inp_dim = 512 + 150 + 6 # pose + gaze
-        # inp_dim = 512 + 150 + 6 + 108 + 64 # all
-        self.left = nn.Linear(inp_dim, 27)
-        self.right = nn.Linear(inp_dim, 27)
+        self.left = nn.Linear(input_dim, 27)
+        self.right = nn.Linear(input_dim, 27)
         # modality FFs
         self.pose_ff = nn.Linear(150, 150)
         self.gaze_ff = nn.Linear(6, 6)
@@ -66,18 +58,10 @@ class ResNet(nn.Module):
 
 
 class ResNetGRU(nn.Module):
-    def __init__(self, device):
+    def __init__(self, input_dim, device):
         super(ResNetGRU, self).__init__()
         resnet = models.resnet34(pretrained=True)
         self.resnet = nn.Sequential(*(list(resnet.children())[:-1]))
-        input_dim = 512 # rgb
-        # input_dim = 512 + 150 # pose
-        # input_dim = 512 + 6 # gaze
-        # input_dim = 512 + 108 # bbox
-        # input_dim = 512 + 64 # ocr
-        # input_dim = 512 + 108 + 64 # bbox + ocr
-        # input_dim = 512 + 150 + 6 # pose + gaze
-        # input_dim = 512 + 150 + 6 + 108 + 64 # all
         self.gru = nn.GRU(input_dim, 512, batch_first=True)
         for name, param in self.gru.named_parameters():
             if "weight" in name:
@@ -134,18 +118,10 @@ class ResNetGRU(nn.Module):
 
 
 class ResNetConv1D(nn.Module):
-    def __init__(self, device):
+    def __init__(self, input_dim, device):
         super(ResNetConv1D, self).__init__()
         resnet = models.resnet34(pretrained=True)
         self.resnet = nn.Sequential(*(list(resnet.children())[:-1]))
-        input_dim = 512 # rgb
-        # input_dim = 512 + 150 # pose
-        # input_dim = 512 + 6 # gaze
-        # input_dim = 512 + 108 # bbox
-        # input_dim = 512 + 64 # ocr
-        # input_dim = 512 + 108 + 64 # bbox + ocr
-        # input_dim = 512 + 150 + 6 # pose + gaze
-        # input_dim = 512 + 150 + 6 + 108 + 64 # all
         self.conv1d = nn.Conv1d(in_channels=input_dim, out_channels=512, kernel_size=5, padding=4)
         # FFs
         self.left = nn.Linear(512, 27)
@@ -199,18 +175,10 @@ class ResNetConv1D(nn.Module):
 
 
 class ResNetLSTM(nn.Module):
-    def __init__(self, device):
+    def __init__(self, input_dim, device):
         super(ResNetLSTM, self).__init__()
         resnet = models.resnet34(pretrained=True)
         self.resnet = nn.Sequential(*(list(resnet.children())[:-1]))
-        input_dim = 512
-        # input_dim = 512 + 150 # pose
-        # input_dim = 512 + 6 # gaze
-        # input_dim = 512 + 108 # bbox
-        # input_dim = 512 + 64 # ocr
-        # input_dim = 512 + 108 + 64 # bbox + ocr
-        # input_dim = 512 + 150 + 6 # pose + gaze
-        # input_dim = 512 + 150 + 6 + 108 + 64 # all
         self.lstm = nn.LSTM(input_size=input_dim, hidden_size=512, batch_first=True)
         # FFs
         self.left = nn.Linear(512, 27)
