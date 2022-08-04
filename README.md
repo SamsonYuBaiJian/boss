@@ -31,6 +31,7 @@ BOSS
 │   ├── gaze
 │   ├── masked
 │   └── pose
+├── OCRMap.txt
 └── label.obj
 ```
 
@@ -40,7 +41,8 @@ BOSS
 3. Based on the modality types you are using, only uncomment the appropriate inp_dim.
 4. Set the frame paths for both train and validation sets to `path/to/dataset_folder/Train/frame` and `path/to/dataset_folder/Val/frame` respectively.
 5. Set the label path to `path/to/dataset_folder/label.obj`.
-6. Set the paths for your desired input modalities for both the train and validations sets (else leave them as None), similar to Step 4.
+6. Set the paths for your desired input modalities for both the train and validations sets (else leave them as None), with paths similar to Step 4.
+7. Run with `python train.py`.
 
 ## Testing
 1. For a specific experiment type, uncomment the appropriate test_frame_ids, else leave it as None.
@@ -51,4 +53,5 @@ BOSS
 5. Set the load_model_path to the path of your desired saved model.
 6. Set the frame path to `path/to/dataset_folder/Test/frame`.
 7. Set the label path to `path/to/dataset_folder/label.obj`.
-8. Set the paths for your desired input modalities (else leave them as None), similar to Step 4.
+8. Set the paths for your desired input modalities (else leave them as None), with paths similar to Step 4.
+9. Run with `python test.py`.
