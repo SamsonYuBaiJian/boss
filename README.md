@@ -9,7 +9,7 @@ Paper: https://arxiv.org/abs/2206.10665
 The BOSS dataset consists of:
 - Original and masked video frames
 - Belief labels for each frame
-- Multiple input modalities, namely object bounding box, object-context relation, human gaze and human pose.
+- Multiple input modalities, namely object bounding box, object-context relation, human gaze and human pose
 
 The dataset is split into three different sets: train, test and val.
 
