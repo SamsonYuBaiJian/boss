@@ -1,11 +1,11 @@
 # BOSS Baseline Models
 This repository contains baseline models for the BOSS dataset.
 
-Website: https://sites.google.com/view/bossbelief/
-Dataset: https://drive.google.com/drive/folders/1b8FdpyoWx9gUps-BX6qbE9Kea3C2Uyua
+Website: https://sites.google.com/view/bossbelief/<br />
+Dataset: https://drive.google.com/drive/folders/1b8FdpyoWx9gUps-BX6qbE9Kea3C2Uyua<br />
 Paper: https://arxiv.org/abs/2206.10665
 
-# Dataset Details
+# Dataset Summary
 The BOSS dataset consists of:
 - Original and masked video frames
 - Belief labels for each frame
@@ -34,6 +34,7 @@ BOSS
 │   ├── gaze
 │   ├── masked
 │   └── pose
+├── README
 ├── OCRMap.txt
 └── label
 ```
