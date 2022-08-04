@@ -43,8 +43,8 @@ strangers = [i for i in range(0, 150)]
 # test_frame_ids = friends
 # test_frame_ids = strangers
 test_frame_ids = None
-median = (240, False)
-# median = None
+# median = (240, False)
+median = None
 
 from model_resnet import Model
 # from model_gru import Model
