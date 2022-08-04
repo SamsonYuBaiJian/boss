@@ -3,12 +3,13 @@ This repository contains baseline models for the BOSS dataset.
 
 Our paper can be found here: https://arxiv.org/abs/2206.10665.
 
-# Running the Code
-## Data Setup
+# Dataset Details
 The BOSS dataset consists of:
-- Video frames
+- Original and masked video frames
 - Belief labels for each frame
-- Multiple input modalities, namely object-context relation, object bounding box, human pose and human gaze.
+- Multiple input modalities, namely object bounding box, object-context relation, human gaze and human pose.
+
+The dataset is split into three different sets: train, test and val.
 
 The dataset folder has the following structure:
 ```
@@ -34,6 +35,18 @@ BOSS
 ├── OCRMap.txt
 └── label.obj
 ```
+
+## Metadata
+- The original frames are found in the frame folders and the masked frames are found in the masked folders.
+- The belief labels are found in the label.obj file.
+- The object bounding boxes are found in the bbox folders.
+- The object-context relations are found in OCRMap.txt.
+- The human gaze data is found in the gaze folders.
+- The human pose data is found in the pose folders.
+
+# Running the Code
+## Installing Dependencies
+Run `pip install -r requirements.txt`.
 
 ## Training
 1. Set your batch_size, num_epoch, save_path and gpu_id in `train.py`.
