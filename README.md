@@ -1,7 +1,9 @@
 # BOSS Baseline Models
 This repository contains baseline models for the BOSS dataset.
 
-Our paper can be found here: https://arxiv.org/abs/2206.10665.
+Website: https://sites.google.com/view/bossbelief/
+Dataset: https://drive.google.com/drive/folders/1b8FdpyoWx9gUps-BX6qbE9Kea3C2Uyua
+Paper: https://arxiv.org/abs/2206.10665
 
 # Dataset Details
 The BOSS dataset consists of:
@@ -33,16 +35,18 @@ BOSS
 │   ├── masked
 │   └── pose
 ├── OCRMap.txt
-└── label.obj
+└── label
 ```
 
 ## Metadata
 - The original frames are found in the frame folders and the masked frames are found in the masked folders.
-- The belief labels are found in the label.obj file.
+- The belief labels are found in the label file.
 - The object bounding boxes are found in the bbox folders.
 - The object-context relations are found in OCRMap.txt.
 - The human gaze data is found in the gaze folders.
 - The human pose data is found in the pose folders.
+
+More details can be found in Section 5.2 of our [paper](https://arxiv.org/abs/2206.10665).
 
 # Running the Code
 ## Installing Dependencies
@@ -53,7 +57,7 @@ Run `pip install -r requirements.txt`.
 2. Uncomment only your desired model_type.
 3. Based on the modality types you are using, only uncomment the appropriate inp_dim.
 4. Set the frame paths for both train and validation sets to `path/to/dataset_folder/Train/frame` and `path/to/dataset_folder/Val/frame` respectively.
-5. Set the label path to `path/to/dataset_folder/label.obj`.
+5. Set the label path to `path/to/dataset_folder/label`.
 6. Set the paths for your desired input modalities for both the train and validations sets (else leave them as None), with paths similar to Step 4.
 7. Run with `python train.py`.
 
@@ -65,6 +69,6 @@ Run `pip install -r requirements.txt`.
 4. Based on the modality types you are using, only uncomment the appropriate inp_dim.
 5. Set the load_model_path to the path of your desired saved model.
 6. Set the frame path to `path/to/dataset_folder/Test/frame`.
-7. Set the label path to `path/to/dataset_folder/label.obj`.
+7. Set the label path to `path/to/dataset_folder/label`.
 8. Set the paths for your desired input modalities (else leave them as None), with paths similar to Step 4.
 9. Run with `python test.py`.
