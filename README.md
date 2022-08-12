@@ -66,7 +66,7 @@ Run `pip install -r requirements.txt`.
 1. For a specific experiment type, uncomment the appropriate test_frame_ids, else leave it as None.
 2. For the median experiment type, uncomment line 46 and comment out line 47. For sequences with length above the median, change the second value in the tuple in line 46 to True, else change it to False. If you do not want to run testing for the median experiment type, leave median as None (i.e. comment out line 46 and uncomment 47).
 2. Set your save_path and gpu_id in `test.py`.
-3. Uncomment only your desired model_type and the import line for that model_type.
+3. Uncomment only your desired model_type.
 4. Based on the modality types you are using, only uncomment the appropriate inp_dim.
 5. Set the load_model_path to the path of your desired saved model.
 6. Set the frame path to `path/to/dataset_folder/Test/frame`.

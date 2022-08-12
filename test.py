@@ -46,10 +46,6 @@ test_frame_ids = None
 # median = (240, False)
 median = None
 
-from model_resnet import Model
-# from model_gru import Model
-# from model_lstm import Model
-# from model_conv1d import Model
 model_type = 'resnet'
 # model_type = 'gru'
 # model_type = 'lstm'
