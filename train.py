@@ -14,29 +14,29 @@ from models import ResNet, ResNetGRU, ResNetLSTM, ResNetConv1D
 # args
 batch_size = 4
 num_epoch = 5
-model_type = 'resnet'
+# model_type = 'resnet'
 # model_type = 'gru'
-# model_type = 'lstm'
+model_type = 'lstm'
 # model_type = 'conv1d'
-inp_dim = 512 # rgb
+# inp_dim = 512 # rgb
 # inp_dim = 512 + 150 # pose
 # inp_dim = 512 + 6 # gaze
 # inp_dim = 512 + 108 # bbox
 # inp_dim = 512 + 64 # ocr
 # inp_dim = 512 + 108 + 64 # bbox + ocr
 # inp_dim = 512 + 150 + 6 # pose + gaze
-# inp_dim = 512 + 150 + 6 + 108 + 64 # all
-train_frame_path = '/path/to/train/frame'
-train_pose_path = None # '/path/to/train/pose'
-train_gaze_path = None # '/path/to/train/gaze'
-train_bbox_path = None # '/path/to/train/bbox'
-val_frame_path = '/path/to/val/frame'
-val_pose_path = None # '/path/to/val/pose'
-val_gaze_path = None # '/path/to/val/gaze'
-val_bbox_path = None # '/path/to/val/bbox'
-ocr_graph_path = None # '/path/to/OCRMap.txt'
-label_path = '/path/to/label'
-save_path = 'experiments/'
+inp_dim = 512 + 150 + 6 + 108 + 64 # all
+train_frame_path = '/mnt/c/Users/samso/Desktop/test/test/frame'
+train_pose_path = '/mnt/c/Users/samso/Desktop/test/test/pose'
+train_gaze_path = '/mnt/c/Users/samso/Desktop/test/test/gaze'
+train_bbox_path = '/mnt/c/Users/samso/Desktop/test/test/bbox'
+val_frame_path = '/mnt/c/Users/samso/Desktop/test/test/frame'
+val_pose_path = '/mnt/c/Users/samso/Desktop/test/test/pose'
+val_gaze_path = '/mnt/c/Users/samso/Desktop/test/test/gaze'
+val_bbox_path = '/mnt/c/Users/samso/Desktop/test/test/bbox'
+ocr_graph_path = '/mnt/c/Users/samso/Desktop/test/test/OCRMap.txt'
+label_path = '/mnt/c/Users/samso/Desktop/test/test/outfile'
+save_path = '/mnt/c/Users/samso/Desktop/test/test/experiments/'
 gpu_id = 7
 
 
@@ -125,7 +125,7 @@ def train():
         model.train()
         for j, batch in tqdm(enumerate(train_dataloader)):
             frames, labels, poses, gazes, bboxes, ocr_graphs, sequence_lengths = batch
-            pred_left_labels, pred_right_labels = model(frames, poses, gazes, bboxes, ocr_graphs)
+            pred_left_labels, pred_right_labels, mm_loss = model(frames, poses, gazes, bboxes, ocr_graphs, labels)
             pred_left_labels = torch.reshape(pred_left_labels, (-1, 27))
             pred_right_labels = torch.reshape(pred_right_labels, (-1, 27))
             labels = torch.reshape(labels, (-1, 2)).to(device)
@@ -133,6 +133,7 @@ def train():
             epoch_cnt += batch_num_pred
             epoch_num_correct += batch_num_correct
             loss = cross_entropy_loss(pred_left_labels, labels[:,0]) + cross_entropy_loss(pred_right_labels, labels[:,1])
+            # TODO: merge losses in a way that has similar magnitude
             temp_train_classification_loss.append(loss.data.item() * batch_num_pred / 2)
 
             model.zero_grad()
@@ -156,7 +157,7 @@ def train():
         with torch.no_grad():
             for j, batch in tqdm(enumerate(val_dataloader)):
                 frames, labels, poses, gazes, bboxes, ocr_graphs, sequence_lengths = batch
-                pred_left_labels, pred_right_labels = model(frames, poses, gazes, bboxes, ocr_graphs)
+                pred_left_labels, pred_right_labels, mm_loss = model(frames, poses, gazes, bboxes, ocr_graphs, labels)
                 pred_left_labels = torch.reshape(pred_left_labels, (-1, 27))
                 pred_right_labels = torch.reshape(pred_right_labels, (-1, 27))
                 labels = torch.reshape(labels, (-1, 2)).to(device)
