@@ -12,7 +12,7 @@ from models import ResNet, ResNetGRU, ResNetLSTM, ResNetConv1D
 
 
 # args
-batch_size = 4
+batch_size = 2
 num_epoch = 5
 # model_type = 'resnet'
 # model_type = 'gru'
@@ -132,8 +132,8 @@ def train():
             batch_train_acc, batch_num_correct, batch_num_pred = get_classification_accuracy(pred_left_labels, pred_right_labels, labels, sequence_lengths)
             epoch_cnt += batch_num_pred
             epoch_num_correct += batch_num_correct
-            loss = cross_entropy_loss(pred_left_labels, labels[:,0]) + cross_entropy_loss(pred_right_labels, labels[:,1])
-            # TODO: merge losses in a way that has similar magnitude
+            # merge losses in a way that has similar magnitude
+            loss = cross_entropy_loss(pred_left_labels, labels[:,0]) + cross_entropy_loss(pred_right_labels, labels[:,1]) + mm_loss
             temp_train_classification_loss.append(loss.data.item() * batch_num_pred / 2)
 
             model.zero_grad()

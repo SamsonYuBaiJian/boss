@@ -204,7 +204,7 @@ class ResNetLSTM(nn.Module):
         for i in range(sequence_len):
             images_i = images[:,i].to(self.device)
             rnn_i_feat = self.resnet(images_i)
-            rnn_i_feat = rnn_i_feat.view(batch_size, 512)
+            rnn_i_feat = [rnn_i_feat.view(batch_size, 512)]
             modal_num = 1
             if i == 0:
                 in_dim = [512]
@@ -232,7 +232,7 @@ class ResNetLSTM(nn.Module):
                 rnn_i_feat.append(bboxes[:,i].float().to(self.device))
             if ocr_tensor is not None:
                 rnn_i_feat.append(ocr_tensor)
-            rnn_i_feat, mm_loss_i = self.mmdynamic(rnn_i_feat, labels)
+            rnn_i_feat, mm_loss_i = self.mmdynamic(rnn_i_feat, labels[:,i,:])
             mm_loss += mm_loss_i
 
             # if poses is not None:
@@ -254,6 +254,7 @@ class ResNetLSTM(nn.Module):
 
             rnn_inp.append(rnn_i_feat)
 
+        print(rnn_inp.shape)
         rnn_inp = torch.permute(torch.stack(rnn_inp), (1,0,2))
         rnn_out, _ = self.lstm(rnn_inp)
         left_beliefs = self.left(self.dropout(rnn_out))
@@ -328,12 +329,16 @@ class MMDynamicFuse(nn.Module):
             MMLoss = torch.mean(FeatureInfo[view])
             # left
             predLeft = F.softmax(TCPLogitLeft[view], dim=1)
-            p_target = torch.gather(input=predLeft, dim=1, index=label.unsqueeze(dim=1)).view(-1)
-            left_confidence_loss = torch.mean(F.mse_loss(TCPConfidenceLeft[view].view(-1), p_target)+criterion(TCPLogitLeft[view], label))
+            # print(predLeft, predLeft.shape, label.shape)
+            left_label = label[:,0]
+            p_target = torch.gather(input=predLeft, dim=1, index=left_label.unsqueeze(dim=1)).view(-1)
+            # print(p_target.shape, TCPConfidenceLeft[view].shape, TCPConfidenceLeft[view].view(-1).shape, TCPLogitLeft[view].shape, left_label.shape)
+            left_confidence_loss = torch.mean(F.mse_loss(TCPConfidenceLeft[view].view(-1), p_target)+criterion(TCPLogitLeft[view], left_label))
             # right
             predRight = F.softmax(TCPLogitRight[view], dim=1)
-            p_target = torch.gather(input=predRight, dim=1, index=label.unsqueeze(dim=1)).view(-1)
-            right_confidence_loss = torch.mean(F.mse_loss(TCPConfidenceRight[view].view(-1), p_target)+criterion(TCPLogitRight[view], label))
+            right_label = label[:,1]
+            p_target = torch.gather(input=predRight, dim=1, index=right_label.unsqueeze(dim=1)).view(-1)
+            right_confidence_loss = torch.mean(F.mse_loss(TCPConfidenceRight[view].view(-1), p_target)+criterion(TCPLogitRight[view], right_label))
             MMLoss = MMLoss+left_confidence_loss+right_confidence_loss
         # return MMLoss, MMlogit
 
