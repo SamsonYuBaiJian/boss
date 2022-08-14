@@ -23,39 +23,73 @@ class ResNet(nn.Module):
         self.dropout = nn.Dropout(p=0.2)
         self.device = device
 
-    def forward(self, images, poses, gazes, bboxes, ocr_tensor):
+    def forward(self, images, poses, gazes, bboxes, ocr_tensor, labels):
         batch_size, sequence_len, channels, height, width = images.shape
         left_beliefs = []
         right_beliefs = []
         image_feats = []
 
+        mm_loss = 0
         for i in range(sequence_len):
             images_i = images[:,i].to(self.device)
             image_i_feat = self.resnet(images_i)
-            image_i_feat = image_i_feat.view(batch_size, 512)
+            image_i_feat = [image_i_feat.view(batch_size, 512)]
+            modal_num = 1
+            if i == 0:
+                in_dim = [512]
+                if poses is not None:
+                    in_dim.append(150)
+                    modal_num += 1
+                if gazes is not None:
+                    in_dim.append(6)
+                    modal_num += 1
+                if bboxes is not None:
+                    in_dim.append(108)
+                    modal_num += 1
+                if ocr_tensor is not None:
+                    in_dim.append(729)
+                    ocr_tensor = ocr_tensor.to(self.device)
+                    modal_num += 1
+                self.mmdynamic = MMDynamicFuse(in_dim, [64], 27, dropout=0.5)
+                self.gru = nn.GRU(64*modal_num, 512, batch_first=True)
+
             if poses is not None:
-                poses_i = poses[:,i].float().to(self.device)
-                poses_i_feat = self.relu(self.pose_ff(poses_i))
-                image_i_feat = torch.cat([image_i_feat, poses_i_feat], 1)
+                image_i_feat.append(poses[:,i].float().to(self.device))
             if gazes is not None:
-                gazes_i = gazes[:,i].float().to(self.device)
-                gazes_i_feat = self.relu(self.gaze_ff(gazes_i))
-                image_i_feat = torch.cat([image_i_feat, gazes_i_feat], 1)
+                image_i_feat.append(gazes[:,i].float().to(self.device))
             if bboxes is not None:
-                bboxes_i = bboxes[:,i].float().to(self.device)
-                bboxes_i_feat = self.relu(self.bbox_ff(bboxes_i))
-                image_i_feat = torch.cat([image_i_feat, bboxes_i_feat], 1)
+                image_i_feat.append(bboxes[:,i].float().to(self.device))
             if ocr_tensor is not None:
-                ocr_tensor = ocr_tensor.to(self.device)
-                ocr_tensor_feat = self.relu(self.ocr_ff(ocr_tensor))
-                image_i_feat = torch.cat([image_i_feat, ocr_tensor_feat], 1)
+                image_i_feat.append(ocr_tensor)
+            image_i_feat, mm_loss_i = self.mmdynamic(image_i_feat, labels[:,i,:])
+            mm_loss += mm_loss_i
+
+            # images_i = images[:,i].to(self.device)
+            # image_i_feat = self.resnet(images_i)
+            # image_i_feat = image_i_feat.view(batch_size, 512)
+            # if poses is not None:
+            #     poses_i = poses[:,i].float().to(self.device)
+            #     poses_i_feat = self.relu(self.pose_ff(poses_i))
+            #     image_i_feat = torch.cat([image_i_feat, poses_i_feat], 1)
+            # if gazes is not None:
+            #     gazes_i = gazes[:,i].float().to(self.device)
+            #     gazes_i_feat = self.relu(self.gaze_ff(gazes_i))
+            #     image_i_feat = torch.cat([image_i_feat, gazes_i_feat], 1)
+            # if bboxes is not None:
+            #     bboxes_i = bboxes[:,i].float().to(self.device)
+            #     bboxes_i_feat = self.relu(self.bbox_ff(bboxes_i))
+            #     image_i_feat = torch.cat([image_i_feat, bboxes_i_feat], 1)
+            # if ocr_tensor is not None:
+            #     ocr_tensor = ocr_tensor.to(self.device)
+            #     ocr_tensor_feat = self.relu(self.ocr_ff(ocr_tensor))
+            #     image_i_feat = torch.cat([image_i_feat, ocr_tensor_feat], 1)
             image_feats.append(image_i_feat)
 
         image_feats = torch.permute(torch.stack(image_feats), (1,0,2))
         left_beliefs = self.left(self.dropout(image_feats))
         right_beliefs = self.right(self.dropout(image_feats))
 
-        return left_beliefs, right_beliefs
+        return left_beliefs, right_beliefs, mm_loss
 
 
 class ResNetGRU(nn.Module):
@@ -63,12 +97,12 @@ class ResNetGRU(nn.Module):
         super(ResNetGRU, self).__init__()
         resnet = models.resnet34(pretrained=True)
         self.resnet = nn.Sequential(*(list(resnet.children())[:-1]))
-        self.gru = nn.GRU(input_dim, 512, batch_first=True)
-        for name, param in self.gru.named_parameters():
-            if "weight" in name:
-                nn.init.orthogonal_(param)
-            elif "bias" in name:
-                nn.init.constant_(param, 0)
+        # self.gru = nn.GRU(input_dim, 512, batch_first=True)
+        # for name, param in self.gru.named_parameters():
+        #     if "weight" in name:
+        #         nn.init.orthogonal_(param)
+        #     elif "bias" in name:
+        #         nn.init.constant_(param, 0)
         # FFs
         self.left = nn.Linear(512, 27)
         self.right = nn.Linear(512, 27)
@@ -82,32 +116,71 @@ class ResNetGRU(nn.Module):
         self.relu = nn.ReLU()
         self.device = device
 
-    def forward(self, images, poses, gazes, bboxes, ocr_tensor):
+    def forward(self, images, poses, gazes, bboxes, ocr_tensor, labels):
         batch_size, sequence_len, channels, height, width = images.shape
         left_beliefs = []
         right_beliefs = []
         rnn_inp = []
 
+        mm_loss = 0
         for i in range(sequence_len):
             images_i = images[:,i].to(self.device)
             rnn_i_feat = self.resnet(images_i)
-            rnn_i_feat = rnn_i_feat.view(batch_size, 512)
+            rnn_i_feat = [rnn_i_feat.view(batch_size, 512)]
+            modal_num = 1
+            if i == 0:
+                in_dim = [512]
+                if poses is not None:
+                    in_dim.append(150)
+                    modal_num += 1
+                if gazes is not None:
+                    in_dim.append(6)
+                    modal_num += 1
+                if bboxes is not None:
+                    in_dim.append(108)
+                    modal_num += 1
+                if ocr_tensor is not None:
+                    in_dim.append(729)
+                    ocr_tensor = ocr_tensor.to(self.device)
+                    modal_num += 1
+                self.mmdynamic = MMDynamicFuse(in_dim, [64], 27, dropout=0.5)
+                self.gru = nn.GRU(64*modal_num, 512, batch_first=True)
+                for name, param in self.gru.named_parameters():
+                    if "weight" in name:
+                        nn.init.orthogonal_(param)
+                    elif "bias" in name:
+                        nn.init.constant_(param, 0)
+
             if poses is not None:
-                poses_i = poses[:,i].float().to(self.device)
-                poses_i_feat = self.relu(self.pose_ff(poses_i))
-                rnn_i_feat = torch.cat([rnn_i_feat, poses_i_feat], 1)
+                rnn_i_feat.append(poses[:,i].float().to(self.device))
             if gazes is not None:
-                gazes_i = gazes[:,i].float().to(self.device)
-                gazes_i_feat = self.relu(self.gaze_ff(gazes_i))
-                rnn_i_feat = torch.cat([rnn_i_feat, gazes_i_feat], 1)
+                rnn_i_feat.append(gazes[:,i].float().to(self.device))
             if bboxes is not None:
-                bboxes_i = bboxes[:,i].float().to(self.device)
-                bboxes_i_feat = self.relu(self.bbox_ff(bboxes_i))
-                rnn_i_feat = torch.cat([rnn_i_feat, bboxes_i_feat], 1)
+                rnn_i_feat.append(bboxes[:,i].float().to(self.device))
             if ocr_tensor is not None:
-                ocr_tensor = ocr_tensor.to(self.device)
-                ocr_tensor_feat = self.relu(self.ocr_ff(ocr_tensor))
-                rnn_i_feat = torch.cat([rnn_i_feat, ocr_tensor_feat], 1)
+                rnn_i_feat.append(ocr_tensor)
+            rnn_i_feat, mm_loss_i = self.mmdynamic(rnn_i_feat, labels[:,i,:])
+            mm_loss += mm_loss_i
+
+            # images_i = images[:,i].to(self.device)
+            # rnn_i_feat = self.resnet(images_i)
+            # rnn_i_feat = rnn_i_feat.view(batch_size, 512)
+            # if poses is not None:
+            #     poses_i = poses[:,i].float().to(self.device)
+            #     poses_i_feat = self.relu(self.pose_ff(poses_i))
+            #     rnn_i_feat = torch.cat([rnn_i_feat, poses_i_feat], 1)
+            # if gazes is not None:
+            #     gazes_i = gazes[:,i].float().to(self.device)
+            #     gazes_i_feat = self.relu(self.gaze_ff(gazes_i))
+            #     rnn_i_feat = torch.cat([rnn_i_feat, gazes_i_feat], 1)
+            # if bboxes is not None:
+            #     bboxes_i = bboxes[:,i].float().to(self.device)
+            #     bboxes_i_feat = self.relu(self.bbox_ff(bboxes_i))
+            #     rnn_i_feat = torch.cat([rnn_i_feat, bboxes_i_feat], 1)
+            # if ocr_tensor is not None:
+            #     ocr_tensor = ocr_tensor.to(self.device)
+            #     ocr_tensor_feat = self.relu(self.ocr_ff(ocr_tensor))
+            #     rnn_i_feat = torch.cat([rnn_i_feat, ocr_tensor_feat], 1)
             rnn_inp.append(rnn_i_feat)
 
         rnn_inp = torch.permute(torch.stack(rnn_inp), (1,0,2))
@@ -115,7 +188,7 @@ class ResNetGRU(nn.Module):
         left_beliefs = self.left(self.dropout(rnn_out))
         right_beliefs = self.right(self.dropout(rnn_out))
 
-        return left_beliefs, right_beliefs
+        return left_beliefs, right_beliefs, mm_loss
 
 
 class ResNetConv1D(nn.Module):
@@ -123,7 +196,7 @@ class ResNetConv1D(nn.Module):
         super(ResNetConv1D, self).__init__()
         resnet = models.resnet34(pretrained=True)
         self.resnet = nn.Sequential(*(list(resnet.children())[:-1]))
-        self.conv1d = nn.Conv1d(in_channels=input_dim, out_channels=512, kernel_size=5, padding=4)
+        # self.conv1d = nn.Conv1d(in_channels=input_dim, out_channels=512, kernel_size=5, padding=4)
         # FFs
         self.left = nn.Linear(512, 27)
         self.right = nn.Linear(512, 27)
@@ -137,32 +210,67 @@ class ResNetConv1D(nn.Module):
         self.dropout = nn.Dropout(p=0.2)
         self.device = device
 
-    def forward(self, images, poses, gazes, bboxes, ocr_tensor):
+    def forward(self, images, poses, gazes, bboxes, ocr_tensor, labels):
         batch_size, sequence_len, channels, height, width = images.shape
         left_beliefs = []
         right_beliefs = []
         conv1d_inp = []
 
+        mm_loss = 0
         for i in range(sequence_len):
             images_i = images[:,i].to(self.device)
             images_i_feat = self.resnet(images_i)
-            images_i_feat = images_i_feat.view(batch_size, 512)
+            images_i_feat = [images_i_feat.view(batch_size, 512)]
+            modal_num = 1
+            if i == 0:
+                in_dim = [512]
+                if poses is not None:
+                    in_dim.append(150)
+                    modal_num += 1
+                if gazes is not None:
+                    in_dim.append(6)
+                    modal_num += 1
+                if bboxes is not None:
+                    in_dim.append(108)
+                    modal_num += 1
+                if ocr_tensor is not None:
+                    in_dim.append(729)
+                    ocr_tensor = ocr_tensor.to(self.device)
+                    modal_num += 1
+                self.mmdynamic = MMDynamicFuse(in_dim, [64], 27, dropout=0.5)
+                self.conv1d = nn.Conv1d(in_channels=64*modal_num, out_channels=512, kernel_size=5, padding=4)
+
             if poses is not None:
-                poses_i = poses[:,i].float().to(self.device)
-                poses_i_feat = self.relu(self.pose_ff(poses_i))
-                images_i_feat = torch.cat([images_i_feat, poses_i_feat], 1)
+                images_i_feat.append(poses[:,i].float().to(self.device))
             if gazes is not None:
-                gazes_i = gazes[:,i].float().to(self.device)
-                gazes_i_feat = self.relu(self.gaze_ff(gazes_i))
-                images_i_feat = torch.cat([images_i_feat, gazes_i_feat], 1)
+                images_i_feat.append(gazes[:,i].float().to(self.device))
             if bboxes is not None:
-                bboxes_i = bboxes[:,i].float().to(self.device)
-                bboxes_i_feat = self.relu(self.bbox_ff(bboxes_i))
-                images_i_feat = torch.cat([images_i_feat, bboxes_i_feat], 1)
+                images_i_feat.append(bboxes[:,i].float().to(self.device))
             if ocr_tensor is not None:
-                ocr_tensor = ocr_tensor.to(self.device)
-                ocr_tensor_feat = self.relu(self.ocr_ff(ocr_tensor))
-                images_i_feat = torch.cat([images_i_feat, ocr_tensor_feat], 1)
+                images_i_feat.append(ocr_tensor)
+            images_i_feat, mm_loss_i = self.mmdynamic(images_i_feat, labels[:,i,:])
+            mm_loss += mm_loss_i
+
+            # images_i = images[:,i].to(self.device)
+            # images_i_feat = self.resnet(images_i)
+            # images_i_feat = images_i_feat.view(batch_size, 512)
+            # if poses is not None:
+            #     poses_i = poses[:,i].float().to(self.device)
+            #     poses_i_feat = self.relu(self.pose_ff(poses_i))
+            #     images_i_feat = torch.cat([images_i_feat, poses_i_feat], 1)
+            # if gazes is not None:
+            #     gazes_i = gazes[:,i].float().to(self.device)
+            #     gazes_i_feat = self.relu(self.gaze_ff(gazes_i))
+            #     images_i_feat = torch.cat([images_i_feat, gazes_i_feat], 1)
+            # if bboxes is not None:
+            #     bboxes_i = bboxes[:,i].float().to(self.device)
+            #     bboxes_i_feat = self.relu(self.bbox_ff(bboxes_i))
+            #     images_i_feat = torch.cat([images_i_feat, bboxes_i_feat], 1)
+            # if ocr_tensor is not None:
+            #     ocr_tensor = ocr_tensor.to(self.device)
+            #     ocr_tensor_feat = self.relu(self.ocr_ff(ocr_tensor))
+            #     images_i_feat = torch.cat([images_i_feat, ocr_tensor_feat], 1)
+
             conv1d_inp.append(images_i_feat)
 
         conv1d_inp = torch.permute(torch.stack(conv1d_inp), (1,2,0))
@@ -172,7 +280,7 @@ class ResNetConv1D(nn.Module):
         left_beliefs = self.left(self.dropout(conv1d_out))
         right_beliefs = self.right(self.dropout(conv1d_out))
 
-        return left_beliefs, right_beliefs
+        return left_beliefs, right_beliefs, mm_loss
 
 
 class ResNetLSTM(nn.Module):
@@ -254,7 +362,6 @@ class ResNetLSTM(nn.Module):
 
             rnn_inp.append(rnn_i_feat)
 
-        print(rnn_inp.shape)
         rnn_inp = torch.permute(torch.stack(rnn_inp), (1,0,2))
         rnn_out, _ = self.lstm(rnn_inp)
         left_beliefs = self.left(self.dropout(rnn_out))
@@ -324,25 +431,26 @@ class MMDynamicFuse(nn.Module):
             featureLeft[view] = feature[view] * TCPConfidenceLeft[view]
             featureRight[view] = feature[view] * TCPConfidenceRight[view]
 
+        MMfeature = torch.cat([i for i in feature.values()], dim=1)
+
+        MMLoss = 0
         for view in range(self.views):
             # MMLoss = MMLoss+torch.mean(FeatureInfo[view])
-            MMLoss = torch.mean(FeatureInfo[view])
+            MMLoss = MMLoss+torch.mean(FeatureInfo[view])
             # left
             predLeft = F.softmax(TCPLogitLeft[view], dim=1)
             # print(predLeft, predLeft.shape, label.shape)
             left_label = label[:,0]
-            p_target = torch.gather(input=predLeft, dim=1, index=left_label.unsqueeze(dim=1)).view(-1)
+            p_target_left = torch.gather(input=predLeft, dim=1, index=left_label.unsqueeze(dim=1)).view(-1)
             # print(p_target.shape, TCPConfidenceLeft[view].shape, TCPConfidenceLeft[view].view(-1).shape, TCPLogitLeft[view].shape, left_label.shape)
-            left_confidence_loss = torch.mean(F.mse_loss(TCPConfidenceLeft[view].view(-1), p_target)+criterion(TCPLogitLeft[view], left_label))
+            left_confidence_loss = torch.mean(F.mse_loss(TCPConfidenceLeft[view].view(-1), p_target_left)+criterion(TCPLogitLeft[view], left_label))
             # right
             predRight = F.softmax(TCPLogitRight[view], dim=1)
             right_label = label[:,1]
-            p_target = torch.gather(input=predRight, dim=1, index=right_label.unsqueeze(dim=1)).view(-1)
-            right_confidence_loss = torch.mean(F.mse_loss(TCPConfidenceRight[view].view(-1), p_target)+criterion(TCPLogitRight[view], right_label))
+            p_target_right = torch.gather(input=predRight, dim=1, index=right_label.unsqueeze(dim=1)).view(-1)
+            right_confidence_loss = torch.mean(F.mse_loss(TCPConfidenceRight[view].view(-1), p_target_right)+criterion(TCPLogitRight[view], right_label))
             MMLoss = MMLoss+left_confidence_loss+right_confidence_loss
         # return MMLoss, MMlogit
-
-        MMfeature = torch.cat([i for i in feature.values()], dim=1)
 
         return MMfeature, MMLoss
 
